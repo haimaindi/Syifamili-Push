@@ -21,7 +21,8 @@ export const notificationService = {
   async registerServiceWorker() {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
-        return await navigator.serviceWorker.register('/sw.js');
+        // Menggunakan path relatif 'sw.js' bukan '/sw.js' untuk menghindari masalah origin pada preview
+        return await navigator.serviceWorker.register('sw.js');
       } catch (error) {
         console.error('Service Worker registration failed:', error);
         return null;
@@ -32,8 +33,13 @@ export const notificationService = {
 
   async checkSubscription() {
     if (!('serviceWorker' in navigator)) return null;
-    const registration = await navigator.serviceWorker.ready;
-    return await registration.pushManager.getSubscription();
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) return null;
+      return await registration.pushManager.getSubscription();
+    } catch (e) {
+      return null;
+    }
   },
 
   async subscribeUser() {
@@ -61,9 +67,7 @@ export const notificationService = {
     try {
       const subscription = await this.checkSubscription();
       if (subscription) {
-        // 1. Beritahu backend untuk hapus (Opsional, tapi bersih)
         await this.sendSubscriptionToBackend(subscription, 'deleteSubscription');
-        // 2. Unsubscribe dari browser
         await subscription.unsubscribe();
         return { success: true, message: 'Notifikasi dinonaktifkan' };
       }

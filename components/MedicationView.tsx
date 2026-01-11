@@ -458,7 +458,7 @@ const MedicationView: React.FC<MedicationViewProps> = ({ member, allMembers, onS
                   <div className="relative z-10 flex flex-col h-full">
                      <button onClick={() => handleGenerateAI(viewingMed, true)} disabled={!!analyzingId} className="w-full mb-6 py-4 bg-teal-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 hover:bg-teal-700 transition-all">
                         {analyzingId === viewingMed.id ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-                        ANALISA INFORMASI OBAT
+                        ANALISA OBAT
                      </button>
 
                      <div className="flex-1 flex flex-col">

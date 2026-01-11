@@ -72,7 +72,6 @@ const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     notificationService.registerServiceWorker();
     
-    // Cek status langganan saat awal muat
     const initNotifStatus = async () => {
       const sub = await notificationService.checkSubscription();
       setIsSubscribed(!!sub);
@@ -98,7 +97,6 @@ const Layout: React.FC<LayoutProps> = ({
 
     try {
       if (isSubscribed) {
-        // Logic Nonaktifkan
         const res = await notificationService.unsubscribeUser();
         if (res.success) {
           setIsSubscribed(false);
@@ -107,7 +105,6 @@ const Layout: React.FC<LayoutProps> = ({
           alert('Gagal menonaktifkan: ' + res.message);
         }
       } else {
-        // Logic Aktifkan
         const permission = await Notification.requestPermission();
         setNotifPermission(permission);
 
@@ -140,8 +137,22 @@ const Layout: React.FC<LayoutProps> = ({
       if (!response.ok) throw new Error('Network response was not ok');
       const text = await response.text();
       const cleanUrl = text.replace(/"/g, '').trim();
+      
       if (cleanUrl && cleanUrl.startsWith('http')) {
-        window.open(cleanUrl, '_blank');
+        // DETEKSI MODE STANDALONE (Add to Home Screen)
+        // Pada iOS Standalone, window.open sering diblokir setelah async fetch.
+        // window.location.href akan memaksa sistem membuka Safari untuk domain eksternal.
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+        
+        if (isStandalone) {
+          window.location.href = cleanUrl;
+        } else {
+          const newWindow = window.open(cleanUrl, '_blank');
+          // Fallback jika window.open diblokir popup blocker
+          if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+             window.location.href = cleanUrl;
+          }
+        }
       } else {
         alert('Tautan tidak valid.');
       }
@@ -260,7 +271,6 @@ const Layout: React.FC<LayoutProps> = ({
             
             <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 gap-1">
               <div className="relative">
-                {/* Radar Effect - Only show if NOT Subscribed */}
                 {!isSubscribed && (
                   <div className="absolute inset-0 z-0">
                     <span className="absolute inset-0 rounded-lg bg-blue-400 animate-ping opacity-75"></span>
@@ -290,7 +300,6 @@ const Layout: React.FC<LayoutProps> = ({
                   )}
                 </button>
 
-                {/* Floating Tooltip Alert - Only show if NOT Subscribed */}
                 {!isSubscribed && (
                   <div className="absolute top-12 right-0 z-[110] whitespace-nowrap animate-bounce pointer-events-none">
                     <div className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-tighter px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 border border-blue-400">

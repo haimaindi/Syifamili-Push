@@ -30,7 +30,7 @@ const formatDateUpper = (dateString: string) => {
   if (!dateString) return '-';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return dateString;
-  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase();
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
 };
 
 const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMember, onUpdateMember, onDeleteMember, onSelectMember, selectedId }) => {

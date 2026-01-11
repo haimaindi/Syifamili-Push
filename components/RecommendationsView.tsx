@@ -47,9 +47,10 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
     setLoading(true);
     try {
       const data = await spreadsheetService.fetchRecommendations();
-      setItems(data);
+      setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Fetch Error:", err);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
     fetchData();
   }, []);
 
-  const parseDateStr = (dateStr: string) => {
+  const parseDateStr = (dateStr: any) => {
     if (!dateStr || typeof dateStr !== 'string') return null;
     if (dateStr.includes('Date(')) {
         const match = dateStr.match(/\d+/g);
@@ -86,26 +87,43 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
 
     return items
       .filter(item => {
-        const hasId = item.id && String(item.id).trim() !== '' && String(item.id).toLowerCase() !== 'id';
-        const endDateObj = parseDateStr(item.endDate);
-        const isActive = endDateObj ? (endDateObj >= today) : false;
-        const matchCategory = activeCategory === 'Semua' || item.jenis === activeCategory;
-        const q = searchTerm.toLowerCase();
-        const matchSearch = item.nama.toLowerCase().includes(q) || 
-                           item.alamat.toLowerCase().includes(q) ||
-                           item.wilayahKerja.toLowerCase().includes(q) ||
-                           (item.keywords && item.keywords.toLowerCase().includes(q));
+        if (!item) return false;
+        
+        // Cek ID aman
+        const idStr = String(item.id || '').trim();
+        if (!idStr || idStr.toLowerCase() === 'id') return false;
 
-        return hasId && isActive && matchCategory && matchSearch;
+        // Cek Tanggal Aktif (EndDate)
+        const endDateObj = parseDateStr(item.endDate);
+        const isActive = endDateObj ? (endDateObj >= today) : true; 
+        
+        // Cek Kategori
+        const itemJenis = String(item.jenis || '');
+        const matchCategory = activeCategory === 'Semua' || itemJenis.includes(activeCategory);
+        
+        // Cek Pencarian (Aman terhadap null/undefined)
+        const q = (searchTerm || '').toLowerCase();
+        const nama = String(item.nama || '').toLowerCase();
+        const alamat = String(item.alamat || '').toLowerCase();
+        const wilayah = String(item.wilayahKerja || '').toLowerCase();
+        const keywords = String(item.keywords || '').toLowerCase();
+
+        const matchSearch = nama.includes(q) || 
+                           alamat.includes(q) ||
+                           wilayah.includes(q) ||
+                           keywords.includes(q);
+
+        return isActive && matchCategory && matchSearch;
       })
       .sort((a, b) => {
+        // Prioritas ke atas
         if (a.priorities === b.priorities) return 0;
         return a.priorities ? -1 : 1;
       });
   }, [items, activeCategory, searchTerm]);
 
-  const handleOpenMap = (url: string) => {
-    if (url && url.startsWith('http')) {
+  const handleOpenMap = (url: any) => {
+    if (url && typeof url === 'string' && url.startsWith('http')) {
       window.open(url, '_blank');
     } else {
       alert("Tautan peta tidak tersedia.");
@@ -126,17 +144,17 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
     if (selectedItem.tenagaKesehatan) {
        contactAddress = selectedItem.tempatPraktik1 
           ? `${selectedItem.tempatPraktik1} - ${selectedItem.alamat1}`
-          : selectedItem.alamat;
-       contactPhone = selectedItem.kontak1 || selectedItem.kontak;
-       contactGmaps = selectedItem.link1 || selectedItem.linkAlamat;
+          : (selectedItem.alamat || '');
+       contactPhone = selectedItem.kontak1 || selectedItem.kontak || '';
+       contactGmaps = selectedItem.link1 || selectedItem.linkAlamat || '';
     } else {
-       contactAddress = selectedItem.alamat;
-       contactPhone = selectedItem.kontak;
-       contactGmaps = selectedItem.linkAlamat;
+       contactAddress = selectedItem.alamat || '';
+       contactPhone = selectedItem.kontak || '';
+       contactGmaps = selectedItem.linkAlamat || '';
     }
 
     setFormContact({
-      name: selectedItem.nama,
+      name: selectedItem.nama || '',
       type: contactType,
       phone: contactPhone,
       address: contactAddress,
@@ -280,6 +298,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
                     src={selectedItem.imageUrl || "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=800"} 
                     className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
                     alt={selectedItem.nama}
+                    referrerPolicy="no-referrer"
                     onError={(e) => { (e.target as any).src = "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=800" }}
                   />
                 </div>
@@ -313,7 +332,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
                   )}
                   {selectedItem.keywords && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {selectedItem.keywords.split(',').map((tag, i) => (
+                      {String(selectedItem.keywords).split(',').map((tag, i) => (
                         <span key={i} className="text-[8px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
                           #{tag.trim()}
                         </span>
@@ -338,7 +357,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
                       const li = (selectedItem as any)[`link${num}`];
                       const sip = (selectedItem as any)[`sip${num}`];
 
-                      if (!tp || tp.trim() === "") return null;
+                      if (!tp || String(tp).trim() === "") return null;
 
                       return (
                         <div key={num} className="p-5 bg-slate-50 rounded-[2rem] border border-slate-100 group transition-all hover:bg-white hover:shadow-md">
@@ -480,6 +499,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({ onAddContact 
                     src={item.imageUrl || "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=800"} 
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     alt={item.nama}
+                    referrerPolicy="no-referrer"
                     onError={(e) => { (e.target as any).src = "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=800" }}
                   />
                 </div>

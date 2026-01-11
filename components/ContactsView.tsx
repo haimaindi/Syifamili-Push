@@ -57,7 +57,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
 
   // Helper untuk Link WA
   const getWaLink = (phone: string) => {
-    let p = phone.replace(/\D/g, '');
+    let p = (phone || '').replace(/\D/g, '');
     if (p.startsWith('0')) {
         p = '62' + p.slice(1);
     }
@@ -146,30 +146,23 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     }
   };
 
-  // --- DEVICE GEOLOCATION (Blue Dot) ---
-  // Strategy: Try High Accuracy (GPS) with long timeout (20s). If fails, Fallback to Low Accuracy (WiFi).
   const startLocationWatch = (autoCenter: boolean = false, useHighAccuracy: boolean = true) => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation tidak didukung browser ini.");
       return;
     }
 
-    // Reset status only on new High Accuracy attempt
     if (useHighAccuracy) {
       setIsLocating(true);
       setLocationError(null);
       setLocationAccuracy("Mencari GPS...");
     }
 
-    // Clean up existing watch if any
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
 
-    // Options Strategy:
-    // High Accuracy: 20s Timeout (Force GPS attempt). 
-    // Low Accuracy: 10s Timeout (Quick WiFi lookup).
     const geoOptions = {
         enableHighAccuracy: useHighAccuracy,
         timeout: useHighAccuracy ? 20000 : 10000, 
@@ -180,17 +173,12 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
       (position) => {
         const { latitude, longitude, accuracy } = position.coords;
         setUserPos({ lat: latitude, lng: longitude, acc: accuracy });
-
-        // FIX: Always stop spinning on first data received, regardless of accuracy.
-        // The watch continues in background to refine it.
         setIsLocating(false);
 
-        // Logic Akurasi & UI Status
         let accuracyStatus = "Tinggi (GPS)";
         let zoomLevel = 18;
         
         if (accuracy > 100) {
-            // Signal found but weak
             accuracyStatus = "Sinyal Lemah (Menunggu perbaikan...)";
             zoomLevel = 15;
         } else if (accuracy > 50) {
@@ -201,7 +189,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
         setLocationAccuracy(accuracyStatus);
 
         if (mapInstanceRef.current) {
-          // Create/Update Blue Dot
           if (!blueDotRef.current) {
              const blueIcon = L.divIcon({
                 className: 'user-location-icon',
@@ -215,7 +202,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
              blueDotRef.current.setLatLng([latitude, longitude]);
           }
 
-          // Create/Update Accuracy Circle
           if (!blueCircleRef.current) {
              blueCircleRef.current = L.circle([latitude, longitude], {
                 radius: accuracy,
@@ -230,7 +216,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
              blueCircleRef.current.setRadius(accuracy);
           }
 
-          // Auto Center Logic (Only on first load or manual click)
           if (autoCenter && redPinRef.current) {
              const latLng = [latitude, longitude];
              mapInstanceRef.current.setView(latLng, zoomLevel); 
@@ -244,26 +229,15 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
         }
       },
       (err) => {
-        console.warn(`Geo Watch Error (${useHighAccuracy ? 'High' : 'Low'} Acc): Code ${err.code} - ${err.message}`);
-        
-        // --- FALLBACK STRATEGY ---
-        // Jika High Accuracy Gagal (Timeout/Unavailable), otomatis coba Low Accuracy
-        // Error Code 3 = Timeout
         if (useHighAccuracy && (err.code === 3 || err.code === 2)) {
-            console.log("High accuracy failed (Timeout/Unavailable), switching to Low Accuracy fallback...");
-            setLocationError("GPS lemah/timeout, beralih ke Network...");
-            startLocationWatch(autoCenter, false); // Recursive call with low accuracy
+            startLocationWatch(autoCenter, false);
             return;
         }
-
-        // Jika Low Accuracy juga gagal, atau permission ditolak, baru tampilkan error final
-        if(err.code === 1) setLocationError("Izin lokasi ditolak. Aktifkan izin di browser.");
-        else if(err.code === 2) setLocationError("Sinyal lokasi tidak tersedia.");
-        else if(err.code === 3) setLocationError("Waktu deteksi habis (Sinyal lemah).");
-        else setLocationError("Gagal mendeteksi lokasi.");
-        
+        if(err.code === 1) setLocationError("Izin lokasi ditolak.");
+        else if(err.code === 2) setLocationError("Sinyal tidak tersedia.");
+        else if(err.code === 3) setLocationError("Waktu deteksi habis.");
+        else setLocationError("Gagal deteksi.");
         setIsLocating(false);
-        if (err.code === 1) stopLocating();
       },
       geoOptions
     );
@@ -277,42 +251,32 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     setIsLocating(false);
   };
 
-  // --- SNAP RED PIN TO BLUE DOT (MANUAL TRIGGER) ---
   const snapToUserLocation = () => {
-    // Force re-read with High Accuracy first
     stopLocating();
     startLocationWatch(true, true);
   };
 
-  // --- SEARCH MAP (Geocoding) ---
   const handleMapSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!mapSearchQuery.trim()) return;
-
     setIsSearchingMap(true);
     setLocationError(null);
-
     try {
       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchQuery)}&limit=1`);
       const data = await response.json();
-
       if (data && data.length > 0) {
         const { lat, lon, display_name } = data[0];
         const newLat = parseFloat(lat);
         const newLng = parseFloat(lon);
-
         if (mapInstanceRef.current && redPinRef.current) {
           const latLng = [newLat, newLng];
-          mapInstanceRef.current.setView(latLng, 17); // Zoom close for search result
+          mapInstanceRef.current.setView(latLng, 17);
           redPinRef.current.setLatLng(latLng);
           updateFormLocation(newLat, newLng);
-          
-          if (!formAddress) {
-             setFormAddress(display_name.split(',')[0]);
-          }
+          if (!formAddress) setFormAddress(display_name.split(',')[0]);
         }
       } else {
-        setLocationError("Lokasi tidak ditemukan. Coba nama jalan atau kota.");
+        setLocationError("Lokasi tidak ditemukan.");
       }
     } catch (error) {
       setLocationError("Gagal mencari lokasi.");
@@ -321,7 +285,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     }
   };
 
-  // ... (Standard CRUD handlers) ...
   const handleOpenForm = (contact?: HealthContact) => {
     setEditingContact(contact || null);
     setFormAddress(contact?.address || '');
@@ -331,7 +294,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     setLocationError(null);
     setMapSearchQuery('');
     setUserPos(null);
-    
     if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -360,12 +322,13 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     { value: 'Other', label: t.contactTypes.Other }
   ];
 
-  const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredContacts = contacts.filter(c => {
+    const q = searchTerm.toLowerCase();
+    const name = (c.name || '').toLowerCase();
+    const address = (c.address || '').toLowerCase();
+    return name.includes(q) || address.includes(q);
+  });
 
-  // --- FORM VIEW ---
   if (viewMode === 'form') {
     return (
       <div className="animate-fadeIn w-full mx-auto pb-24">
@@ -375,7 +338,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
            </button>
            <h2 className="text-2xl font-black text-slate-800 tracking-tight">{editingContact ? 'Ubah Kontak' : 'Tambah Kontak Baru'}</h2>
         </div>
-
         <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-slate-100">
             <form onSubmit={(e) => {
                 e.preventDefault();
@@ -396,18 +358,13 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                 else onAddContact(contactData);
                 setViewMode('list');
             }} className="space-y-6">
-              
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nama Faskes / Dokter</label>
                 <input name="name" defaultValue={editingContact?.name} required className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm shadow-sm focus:ring-4 focus:ring-blue-50 transition-all" placeholder="RS Harapan Kita" />
               </div>
-
-              {/* MAPS INTERFACE */}
               <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 relative">
                  <div className="flex flex-col gap-3 mb-4">
                     <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2"><Map size={14} /> Tentukan Lokasi</label>
-                    
-                    {/* SEARCH BOX */}
                     <div className="flex gap-2 relative z-[401]">
                         <input 
                           type="text" 
@@ -422,17 +379,13 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                         </button>
                     </div>
                  </div>
-                 
                  {locationError && (
                     <div className="mb-2 text-[9px] font-bold text-rose-500 flex items-center gap-1 bg-rose-50 px-3 py-2 rounded-xl border border-rose-100 animate-pulse">
                        <Wifi size={12} /> {locationError}
                     </div>
                  )}
-
                  <div className="w-full h-72 rounded-2xl overflow-hidden shadow-inner border border-slate-200 relative z-0 mb-4">
                     <div ref={mapContainerRef} className="w-full h-full"></div>
-                    
-                    {/* Floating 'Use My Location' Button */}
                     <div className="absolute bottom-4 right-4 z-[400] flex flex-col gap-2 items-end">
                        {userPos && (
                           <div className="bg-white/90 backdrop-blur px-3 py-2 rounded-xl border border-slate-200 shadow-lg mb-1 animate-fadeIn flex flex-col items-end gap-1">
@@ -453,15 +406,12 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                           <span className="text-[10px] font-black uppercase tracking-widest">Lokasi Saya</span>
                        </button>
                     </div>
-
-                    {/* Instruction Overlay */}
                     <div className="absolute top-2 left-2 right-2 flex justify-center pointer-events-none z-[400]">
                        <span className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-full text-[8px] font-black uppercase text-slate-600 shadow-sm border border-slate-100 flex items-center gap-2">
                           <MousePointer2 size={10} /> Geser <span className="text-red-500 font-bold">Pin Merah</span> ke titik akurat
                        </span>
                     </div>
                  </div>
-
                  <div className="grid grid-cols-2 gap-4">
                     <div>
                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Latitude</label>
@@ -473,7 +423,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                     </div>
                  </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tipe</label>
@@ -488,17 +437,14 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                   <input name="phone" defaultValue={editingContact?.phone} required className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm shadow-sm" placeholder="021-xxxxxx" />
                 </div>
               </div>
-              
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t.address}</label>
                 <input name="address" value={formAddress} onChange={(e) => setFormAddress(e.target.value)} required className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm shadow-sm" placeholder="Jl. Raya No. 123" />
               </div>
-              
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t.gmapsUrl}</label>
                 <input name="gmapsUrl" value={formGmapsUrl} onChange={(e) => setFormGmapsUrl(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm shadow-sm" placeholder="https://maps.google.com/..." />
               </div>
-
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setViewMode('list')} className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs hover:bg-slate-200 transition-all">Batal</button>
                 <button type="submit" className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">Simpan</button>
@@ -509,7 +455,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     );
   }
 
-  // --- DETAIL VIEW ---
   if (viewMode === 'detail' && viewingContact) {
     return (
       <div className="animate-fadeIn w-full mx-auto space-y-8 pb-24">
@@ -519,22 +464,17 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
            </button>
            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Detail Kontak</h2>
         </div>
-
         <div className="bg-white rounded-[3.5rem] p-10 shadow-sm border border-slate-100 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-24 bg-slate-900"></div>
-            
             <div className="relative pt-12 flex flex-col items-center">
                  <div className="w-24 h-24 rounded-3xl bg-white border-8 border-white shadow-2xl flex items-center justify-center text-slate-900 mb-6">
                     <Hospital size={48} />
                  </div>
-                 
                  <div className="text-center mb-8">
                     <h3 className="text-3xl font-black text-slate-800 leading-tight mb-2">{viewingContact.name}</h3>
                     <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-4 py-1.5 rounded-full">{contactTypes.find(c => c.value === viewingContact.type)?.label || viewingContact.type}</span>
                  </div>
-
                  <div className="w-full space-y-4">
-                    {/* CUSTOM PHONE ROW WITH ACTIONS */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-4 shadow-inner">
                         <div className="p-3 bg-white rounded-xl shadow-sm text-slate-400 border border-slate-50"><Phone size={20} /></div>
                         <div className="flex-1">
@@ -550,7 +490,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                            </div>
                         </div>
                     </div>
-
                     <ContactDetail icon={MapPin} label="Alamat" value={viewingContact.address} />
                     {(typeof viewingContact.latitude === 'number' && typeof viewingContact.longitude === 'number') && (
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
@@ -565,14 +504,9 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                                  allowFullScreen
                               ></iframe>
                            </div>
-                           <div className="flex justify-between mt-3 text-[10px] font-bold text-slate-500 uppercase">
-                              <span>Lat: {viewingContact.latitude.toFixed(5)}</span>
-                              <span>Lng: {viewingContact.longitude.toFixed(5)}</span>
-                           </div>
                         </div>
                     )}
                  </div>
-
                  <div className="flex flex-col gap-3 w-full mt-8">
                     {(viewingContact.gmapsUrl || (viewingContact.latitude && viewingContact.longitude)) && (
                       <button 
@@ -592,9 +526,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                          <Navigation size={18} /> DIRECTION
                       </button>
                     )}
-                    <button onClick={() => handleOpenForm(viewingContact)} className="w-full py-5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all">
-                       Ubah Data
-                    </button>
                  </div>
             </div>
         </div>
@@ -602,7 +533,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
     );
   }
 
-  // --- LIST VIEW ---
   return (
     <div className="space-y-8 animate-fadeIn pb-24">
       <ConfirmationModal 
@@ -612,11 +542,9 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
         title="Hapus Kontak?"
         message="Kontak yang dihapus tidak dapat dikembalikan."
       />
-
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">{t.contacts}</h2>
-          <p className="text-slate-500 font-medium italic">Sentralisasi data dokter, tenaga kesehatan dan fasilitas kesehatan</p>
         </div>
         <button 
           onClick={() => handleOpenForm()}
@@ -625,26 +553,23 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
           <Plus size={20} /> {t.addContact}
         </button>
       </div>
-
       <div className="relative">
         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
         <input 
           type="text" 
-          placeholder={language === 'ID' ? 'Cari nama faskes atau alamat...' : 'Search facility name or address...'}
+          placeholder={'Cari nama faskes atau alamat...'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-[2rem] shadow-sm outline-none font-medium focus:ring-4 focus:ring-blue-50 font-medium transition-all"
+          className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-[2rem] shadow-sm outline-none font-medium focus:ring-4 focus:ring-blue-50 transition-all"
         />
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {filteredContacts.length > 0 ? filteredContacts.map((contact) => (
+        {filteredContacts.map((contact) => (
           <div key={contact.id} className="bg-white p-8 rounded-[3.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col h-full overflow-hidden cursor-pointer" onClick={() => handleOpenDetail(contact)}>
             <div className="flex justify-between items-start mb-6">
               <div className={`p-4 rounded-3xl ${
                 contact.type === 'Hospital' ? 'bg-rose-50 text-rose-600' : 
                 contact.type === 'Clinic' ? 'bg-blue-50 text-blue-600' : 
-                contact.type === 'Laboratory' ? 'bg-purple-50 text-purple-600' :
                 'bg-emerald-50 text-emerald-600'
               }`}>
                 <Hospital size={28} />
@@ -654,11 +579,9 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
                 <button onClick={(e) => { e.stopPropagation(); setDeleteTargetId(contact.id); }} className="p-3 text-red-500 bg-red-50 rounded-2xl transition-all hover:bg-red-100"><Trash2 size={18} /></button>
               </div>
             </div>
-
             <div className="flex-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 inline-block">{contactTypes.find(c => c.value === contact.type)?.label || contact.type}</span>
               <h3 className="text-xl font-black text-slate-800 leading-tight mb-4 group-hover:text-blue-600 transition-colors">{contact.name}</h3>
-              
               <div className="space-y-4 mb-8">
                 <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-3 text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors">
                   <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400"><PhoneCall size={14} /></div>
@@ -671,13 +594,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, language, onAddCo
               </div>
             </div>
           </div>
-        )) : (
-          <div className="col-span-full py-32 text-center bg-white rounded-[4rem] border-2 border-dashed border-slate-100 flex flex-col items-center">
-            <PhoneCall size={64} className="mx-auto text-slate-100 mb-6" />
-            <h3 className="text-xl font-black text-slate-800">{language === 'ID' ? 'Belum Ada Kontak' : 'No Contacts Yet'}</h3>
-            <p className="text-slate-400 max-w-xs mx-auto mt-2 font-medium">Tambahkan daftar fasilitas kesehatan atau dokter langganan Anda.</p>
-          </div>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -688,11 +605,7 @@ const ContactDetail = ({ icon: Icon, label, value, isLink }: any) => (
     <div className="p-3 bg-white rounded-xl shadow-sm text-slate-400 border border-slate-50"><Icon size={20} /></div>
     <div>
        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-       {isLink ? (
-         <a href={isLink} className="text-sm font-black text-blue-600 hover:underline">{value}</a>
-       ) : (
-         <p className="text-sm font-black text-slate-800 leading-relaxed">{value}</p>
-       )}
+       <p className="text-sm font-black text-slate-800 leading-relaxed">{value || '-'}</p>
     </div>
   </div>
 );
