@@ -1,6 +1,6 @@
 
 /**
- * Syifamili Backend - Fixed Push Broadcast Logic
+ * Syifamili Backend - Fixed Push Broadcast Logic with Custom Redaction
  */
 
 const VERCEL_PUSH_API_URL = 'https://GANTI_DENGAN_DOMAIN_VERCEL_ANDA/api/send-push'; 
@@ -80,7 +80,6 @@ function doPost(e) {
         if (sheet.getLastRow() === 0) sheet.appendRow(DATABASE_SCHEMA['subscriptions']);
         
         const data = sheet.getDataRange().getValues();
-        // Cek duplikasi endpoint
         const isDuplicate = data.some(row => row[0] === sub.endpoint);
         if (!isDuplicate) {
           sheet.appendRow([sub.endpoint, sub.keys.p256dh, sub.keys.auth, request.userAgent, new Date().toISOString()]);
@@ -127,7 +126,7 @@ function doPost(e) {
 }
 
 /**
- * Pengecekan Terjadwal (Run every 1 minute via Trigger)
+ * Pengecekan Terjadwal Otomatis (Trigger menit-an)
  */
 function checkReminders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -138,6 +137,9 @@ function checkReminders() {
   const target = new Date(now.getTime() + (10 * 60 * 1000));
   const targetStr = Utilities.formatDate(target, tz, "yyyy-MM-dd HH:mm");
   
+  // Helper Map Nama Member
+  const memberNames = getMemberNamesMap(ss);
+
   // 1. Pengingat Obat
   const medSheet = ss.getSheetByName('meds');
   if (medSheet) {
@@ -147,9 +149,11 @@ function checkReminders() {
       if ((row[7] === 'TRUE' || row[7] === 'true') && row[6]) {
         const sched = Utilities.formatDate(new Date(row[6]), tz, "yyyy-MM-dd HH:mm");
         if (sched === targetStr) {
+          const mName = (memberNames[row[1]] || "Keluarga").toUpperCase();
+          const clock = Utilities.formatDate(new Date(row[6]), tz, "HH:mm");
           sendPushBroadcast({
-            title: "Waktunya Minum Obat 💊",
-            body: `Pemberitahuan 10 menit lagi: ${row[2]} (${row[3]}).`,
+            title: `Jadwal Obat ${mName}`,
+            body: `Jangan lupa minum/pakai obat ${row[2]} pada pukul ${clock}`,
             url: "/?tab=meds&id=" + row[0] + "&memberId=" + row[1]
           });
         }
@@ -162,19 +166,43 @@ function checkReminders() {
   if (apptSheet) {
     const vals = apptSheet.getDataRange().getDisplayValues();
     for (let i = 1; i < vals.length; i++) {
-      const row = vals[i]; // 0:id, 1:memberId, 2:title, 3:dateTime, 5:location
+      const row = vals[i]; // 0:id, 1:memberId, 2:title, 3:dateTime, 4:doctor, 5:location
       if (row[3]) {
         const sched = Utilities.formatDate(new Date(row[3]), tz, "yyyy-MM-dd HH:mm");
         if (sched === targetStr) {
+          const mName = (memberNames[row[1]] || "Keluarga").toUpperCase();
+          const clock = Utilities.formatDate(new Date(row[3]), tz, "HH:mm");
           sendPushBroadcast({
-            title: "Jadwal Kontrol 🏥",
-            body: `Pengingat 10 menit lagi: ${row[2]} di ${row[5]}.`,
+            title: `Jadwal Kontrol ${mName}`,
+            body: `Jangan lupa kontrol dengan ${row[4]} di ${row[5]} pada pukul ${clock}`,
             url: "/?tab=schedule&id=" + row[0] + "&memberId=" + row[1]
           });
         }
       }
     }
   }
+}
+
+/**
+ * Helper: Ambil Map Nama Anggota [ID]: [NAMA]
+ */
+function getMemberNamesMap(ss) {
+  const sheet = ss.getSheetByName('members');
+  if (!sheet) return {};
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    map[data[i][0]] = data[i][1];
+  }
+  return map;
+}
+
+/**
+ * Helper: Mengubah teks ke Proper Case (Huruf Besar di Awal Kata)
+ */
+function toProperCase(str) {
+  if (!str) return "";
+  return str.toLowerCase().replace(/\b\w/g, function(l) { return l.toUpperCase(); });
 }
 
 function sendPushBroadcast(payload) {

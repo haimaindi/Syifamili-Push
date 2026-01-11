@@ -22,7 +22,7 @@ import {
   Handshake,
   Bell,
   BellRing,
-  Smartphone
+  Info
 } from 'lucide-react';
 import { Language } from '../types';
 import { useTranslation } from '../translations';
@@ -68,53 +68,43 @@ const Layout: React.FC<LayoutProps> = ({
   ];
 
   useEffect(() => {
-    // Hanya register SW, JANGAN auto-subscribe (iOS butuh klik manual)
     notificationService.registerServiceWorker();
-  }, []);
+    
+    // Interval check untuk update status permission jika user berubah pikiran di settings
+    const checkInterval = setInterval(() => {
+      if (Notification.permission !== notifPermission) {
+        setNotifPermission(Notification.permission);
+      }
+    }, 2000);
+    
+    return () => clearInterval(checkInterval);
+  }, [notifPermission]);
 
   const handleSubscribeClick = async () => {
-    // 1. Cek Permission Awal
     if (Notification.permission === 'denied') {
-      alert('Izin notifikasi diblokir browser. Mohon reset izin di pengaturan browser/HP Anda.');
+      alert('Izin notifikasi diblokir browser. Mohon reset izin di pengaturan browser/HP Anda untuk menerima pengingat.');
       return;
     }
 
     setIsSubscribing(true);
 
     try {
-      // 2. Request Permission Explicitly (Wajib untuk iOS)
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
 
       if (permission === 'granted') {
-        // 3. Lakukan Subscribe ke Server
         const res = await notificationService.subscribeUser();
         if (res.success) {
-          alert('Berhasil! Notifikasi aktif untuk perangkat ini.');
+          alert('Berhasil! Notifikasi pengingat sekarang aktif di perangkat ini.');
         } else {
           alert('Gagal menyimpan langganan: ' + res.message);
         }
-      } else {
-        alert('Izin notifikasi tidak diberikan.');
       }
     } catch (e) {
       console.error(e);
       alert('Terjadi kesalahan saat mengaktifkan notifikasi.');
     } finally {
       setIsSubscribing(false);
-    }
-  };
-
-  const handleLocalTest = async () => {
-    if (Notification.permission !== 'granted') {
-      alert('Mohon aktifkan notifikasi (ikon lonceng) terlebih dahulu.');
-      return;
-    }
-    
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'TEST_NOTIFICATION' });
-    } else {
-      alert('Service Worker belum siap. Coba refresh halaman.');
     }
   };
 
@@ -251,32 +241,44 @@ const Layout: React.FC<LayoutProps> = ({
             )}
             
             <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 gap-1">
-              <button 
-                onClick={handleSubscribeClick}
-                disabled={isSubscribing}
-                className={`p-2 rounded-lg transition-all group ${
-                  notifPermission === 'granted' 
-                    ? 'text-emerald-600 bg-white shadow-sm' 
-                    : 'text-slate-500 hover:text-blue-600 hover:bg-white animate-pulse'
-                }`}
-                title={notifPermission === 'granted' ? "Notifikasi Aktif" : "Aktifkan Notifikasi"}
-              >
-                {isSubscribing ? (
-                  <Loader2 size={18} className="animate-spin text-blue-600" />
-                ) : notifPermission === 'granted' ? (
-                  <BellRing size={18} />
-                ) : (
-                  <Bell size={18} className="group-hover:animate-swing" />
+              <div className="relative">
+                {/* Pulsating Radar Effect - Only show if permission not granted */}
+                {notifPermission !== 'granted' && (
+                  <div className="absolute inset-0 z-0">
+                    <span className="absolute inset-0 rounded-lg bg-blue-400 animate-ping opacity-75"></span>
+                    <span className="absolute inset-[-4px] rounded-lg border-2 border-blue-400 animate-pulse opacity-50"></span>
+                  </div>
                 )}
-              </button>
 
-              <button 
-                onClick={handleLocalTest}
-                className="p-2 text-slate-500 hover:text-purple-600 hover:bg-white rounded-lg transition-all"
-                title="Test Notifikasi di HP Ini"
-              >
-                <Smartphone size={18} />
-              </button>
+                <button 
+                  onClick={handleSubscribeClick}
+                  disabled={isSubscribing}
+                  className={`relative z-10 p-2 rounded-lg transition-all group ${
+                    notifPermission === 'granted' 
+                      ? 'text-emerald-600 bg-white shadow-sm' 
+                      : 'text-white bg-blue-600 shadow-lg shadow-blue-200'
+                  }`}
+                  title={notifPermission === 'granted' ? "Notifikasi Aktif" : "Aktifkan Notifikasi"}
+                >
+                  {isSubscribing ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : notifPermission === 'granted' ? (
+                    <BellRing size={18} />
+                  ) : (
+                    <Bell size={18} className="animate-swing" />
+                  )}
+                </button>
+
+                {/* Floating Tooltip Alert */}
+                {notifPermission !== 'granted' && (
+                  <div className="absolute top-12 right-0 z-[110] whitespace-nowrap animate-bounce pointer-events-none">
+                    <div className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-tighter px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 border border-blue-400">
+                      <Info size={10} /> Aktifkan Notifikasi Pengingat
+                      <div className="absolute -top-1 right-4 w-2 h-2 bg-blue-600 rotate-45 border-l border-t border-blue-400"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="w-px h-6 bg-slate-200 mx-1"></div>
 
