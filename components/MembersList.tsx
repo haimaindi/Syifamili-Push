@@ -1,6 +1,25 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { UserPlus, Shield, Trash2, Edit2, Camera, CreditCard, Search, Image as ImageIcon, ExternalLink, ChevronLeft, CheckCircle2, Eye, Loader2, Users } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { 
+  UserPlus, 
+  Shield, 
+  Trash2, 
+  Edit2, 
+  Camera, 
+  CreditCard, 
+  Search, 
+  Image as ImageIcon, 
+  ExternalLink, 
+  ChevronLeft, 
+  ChevronRight,
+  CheckCircle2, 
+  Eye, 
+  Loader2, 
+  Users,
+  X,
+  Info
+} from 'lucide-react';
 import { FamilyMember, Relation, AllergyDetail, Insurance, Language, Gender } from '../types';
 import { spreadsheetService } from '../services/spreadsheetService';
 import { useTranslation } from '../translations';
@@ -18,12 +37,12 @@ interface MembersListProps {
 
 interface TempAllergy extends Partial<AllergyDetail> {
   localFile?: File;
-  previewUrl?: string; // For instant preview
+  previewUrl?: string; 
 }
 
 interface TempInsurance extends Partial<Insurance> {
   localFile?: File;
-  previewUrl?: string; // For instant preview
+  previewUrl?: string; 
 }
 
 const formatDateUpper = (dateString: string) => {
@@ -45,6 +64,10 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
   const [searchTerm, setSearchTerm] = useState('');
   const photoInputRef = useRef<HTMLInputElement>(null);
   const t = useTranslation(language);
+
+  // Modal State untuk Slider Detail (Asuransi & Alergi)
+  const [activeInsuranceIdx, setActiveInsuranceIdx] = useState<number | null>(null);
+  const [activeAllergyIdx, setActiveAllergyIdx] = useState<number | null>(null);
 
   // Confirmation Modal State
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -78,7 +101,7 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
 
   const handleOpenDetail = (member: FamilyMember) => {
     setEditingMember(member);
-    onSelectMember(member.id); // Also select it for context
+    onSelectMember(member.id); 
     setViewMode('detail');
   };
 
@@ -94,7 +117,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
     }
   };
 
-  // Instant Image Preview Handlers
   const handleInsuranceFileChange = (e: React.ChangeEvent<HTMLInputElement>, idx: number) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -205,7 +227,162 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
     }
   };
 
-  // --- RENDER FORM ---
+  // --- RENDERING MODAL SLIDER DETAIL ---
+
+  const renderInsuranceSlider = () => {
+    if (activeInsuranceIdx === null || !editingMember) return null;
+    const current = editingMember.insurances[activeInsuranceIdx];
+    const total = editingMember.insurances.length;
+
+    const next = () => setActiveInsuranceIdx((activeInsuranceIdx + 1) % total);
+    const prev = () => setActiveInsuranceIdx((activeInsuranceIdx - 1 + total) % total);
+
+    return createPortal(
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden relative border-4 border-white animate-scaleIn flex flex-col md:flex-row max-h-[90vh]">
+          <button onClick={() => setActiveInsuranceIdx(null)} className="absolute top-4 right-4 z-10 p-3 bg-white/20 hover:bg-white/40 text-white md:text-slate-400 md:bg-slate-100 md:hover:bg-slate-200 rounded-full transition-all">
+            <X size={24} />
+          </button>
+
+          <div className="md:w-1/2 bg-slate-900 flex items-center justify-center relative overflow-hidden group">
+            {current.cardUrl ? (
+              <img 
+                src={current.cardUrl} 
+                className="w-full h-full object-contain cursor-pointer hover:opacity-90 transition-opacity" 
+                alt="Kartu Asuransi" 
+                onClick={() => window.open(current.cardUrl, '_blank')}
+                title="Klik untuk lihat gambar penuh"
+              />
+            ) : (
+              <div className="flex flex-col items-center text-slate-600 py-20">
+                <CreditCard size={80} strokeWidth={1} />
+                <p className="mt-4 text-[10px] font-black uppercase tracking-widest">Foto Kartu Tidak Tersedia</p>
+              </div>
+            )}
+            
+            {total > 1 && (
+              <div className="absolute inset-x-0 bottom-6 flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={prev} className="p-3 bg-white/20 backdrop-blur text-white rounded-full hover:bg-white/40"><ChevronLeft size={20}/></button>
+                <button onClick={next} className="p-3 bg-white/20 backdrop-blur text-white rounded-full hover:bg-white/40"><ChevronRight size={20}/></button>
+              </div>
+            )}
+          </div>
+
+          <div className="md:w-1/2 p-8 md:p-10 flex flex-col justify-center">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><CreditCard size={24} /></div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Detail Asuransi</p>
+                <p className="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Item {activeInsuranceIdx + 1} dari {total}</p>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nama Penyedia</h5>
+                <p className="text-2xl font-black text-slate-800 leading-tight">{current.providerName || '-'}</p>
+              </div>
+              <div>
+                <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nomor Kartu / Polis</h5>
+                <p className="text-xl font-black text-blue-600 tracking-tight break-all">{current.number || '-'}</p>
+              </div>
+            </div>
+
+            {total > 1 && (
+              <div className="mt-12 flex items-center justify-between border-t border-slate-100 pt-6">
+                <button onClick={prev} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors">
+                  <ChevronLeft size={16}/> Sebelumnya
+                </button>
+                <button onClick={next} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors">
+                  Selanjutnya <ChevronRight size={16}/>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
+  const renderAllergySlider = () => {
+    if (activeAllergyIdx === null || !editingMember) return null;
+    const current = editingMember.allergies[activeAllergyIdx];
+    const total = editingMember.allergies.length;
+
+    const next = () => setActiveAllergyIdx((activeAllergyIdx + 1) % total);
+    const prev = () => setActiveAllergyIdx((activeAllergyIdx - 1 + total) % total);
+
+    return createPortal(
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden relative border-4 border-white animate-scaleIn flex flex-col md:flex-row max-h-[90vh]">
+          <button onClick={() => setActiveAllergyIdx(null)} className="absolute top-4 right-4 z-10 p-3 bg-white/20 hover:bg-white/40 text-white md:text-slate-400 md:bg-slate-100 md:hover:bg-slate-200 rounded-full transition-all">
+            <X size={24} />
+          </button>
+
+          <div className="md:w-1/2 bg-slate-100 flex items-center justify-center relative overflow-hidden group">
+            {current.photoUrl ? (
+              <img 
+                src={current.photoUrl} 
+                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
+                alt="Foto Alergi" 
+                onClick={() => window.open(current.photoUrl, '_blank')}
+                title="Klik untuk lihat gambar penuh"
+              />
+            ) : (
+              <div className="flex flex-col items-center text-slate-300 py-20">
+                <Shield size={80} strokeWidth={1} />
+                <p className="mt-4 text-[10px] font-black uppercase tracking-widest">Foto Tidak Tersedia</p>
+              </div>
+            )}
+            
+            {total > 1 && (
+              <div className="absolute inset-x-0 bottom-6 flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={prev} className="p-3 bg-white/20 backdrop-blur text-white rounded-full hover:bg-white/40"><ChevronLeft size={20}/></button>
+                <button onClick={next} className="p-3 bg-white/20 backdrop-blur text-white rounded-full hover:bg-white/40"><ChevronRight size={20}/></button>
+              </div>
+            )}
+          </div>
+
+          <div className="md:w-1/2 p-8 md:p-10 flex flex-col justify-center">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><Shield size={24} /></div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Detail Alergi</p>
+                <p className="text-[9px] font-bold text-rose-500 uppercase tracking-tighter">Item {activeAllergyIdx + 1} dari {total}</p>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Pemicu Alergi</h5>
+                <p className="text-2xl font-black text-slate-800 leading-tight">{current.name || '-'}</p>
+              </div>
+              <div className="p-5 bg-rose-50 rounded-3xl border border-rose-100">
+                <h5 className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Reaksi Tubuh</h5>
+                <p className="text-sm font-bold text-rose-700 leading-relaxed italic">"{current.reaction || '-'}"</p>
+              </div>
+            </div>
+
+            {total > 1 && (
+              <div className="mt-12 flex items-center justify-between border-t border-slate-100 pt-6">
+                <button onClick={prev} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-rose-600 transition-colors">
+                  <ChevronLeft size={16}/> Sebelumnya
+                </button>
+                <button onClick={next} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-rose-600 transition-colors">
+                  Selanjutnya <ChevronRight size={16}/>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
+  // --- END RENDERING MODAL SLIDER ---
+
   if (viewMode === 'form') {
     return (
       <div className="animate-fadeIn w-full pb-24">
@@ -256,7 +433,7 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tanggal Lahir</label>
-                <input name="birthDate" type="date" defaultValue={editingMember?.birthDate} required className="w-full px-5 py-3.5 md:px-6 md:py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold shadow-sm focus:ring-4 focus:ring-blue-50 transition-all text-sm md:text-base" />
+                <input name="birthDate" type="date" defaultValue={editingMember?.birthDate || '1900-12-30'} required className="w-full px-5 py-3.5 md:px-6 md:py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold shadow-sm focus:ring-4 focus:ring-blue-50 transition-all text-sm md:text-base" />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Gol. Darah</label>
@@ -271,7 +448,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
               </div>
             </div>
 
-            {/* Insurance Dynamic Section */}
             <div className="bg-blue-50/50 p-6 md:p-8 rounded-[2.5rem] border border-blue-100">
                <div className="flex justify-between items-center mb-6">
                   <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14} /> Asuransi / BPJS</h5>
@@ -292,7 +468,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                                 <span className="text-[10px] font-black uppercase text-slate-500">{ins.previewUrl || ins.cardUrl ? 'Ganti Foto' : 'Upload Foto Kartu'}</span>
                                 <input type="file" className="hidden" accept="image/*" onChange={(e) => handleInsuranceFileChange(e, idx)} />
                              </label>
-                             {/* Instant Preview */}
                              {(ins.previewUrl || ins.cardUrl) && (
                                <div className="w-20 h-20 aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative shrink-0">
                                   <img src={ins.previewUrl || ins.cardUrl} className="w-full h-full object-cover" alt="Preview" />
@@ -300,7 +475,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                              )}
                            </div>
                         </div>
-                        {/* Delete Button Separated - ALWAYS RED */}
                         <button type="button" onClick={() => setTempInsurances(tempInsurances.filter((_, i) => i !== idx))} className="shrink-0 p-3 bg-red-50 text-red-500 rounded-xl border border-red-100 shadow-sm transition-all h-fit hover:bg-red-100"><Trash2 size={18} /></button>
                     </div>
                   ))}
@@ -308,7 +482,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                </div>
             </div>
 
-            {/* Allergy Dynamic Section */}
             <div className="bg-rose-50/50 p-6 md:p-8 rounded-[2.5rem] border border-red-100">
                <div className="flex justify-between items-center mb-6">
                   <h5 className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2"><Shield size={14} /> Daftar Alergi</h5>
@@ -329,7 +502,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                                 <span className="text-[10px] font-black uppercase text-slate-500">{al.previewUrl || al.photoUrl ? 'Ganti Foto' : 'Upload Foto Reaksi'}</span>
                                 <input type="file" className="hidden" accept="image/*" onChange={(e) => handleAllergyFileChange(e, idx)} />
                              </label>
-                             {/* Instant Preview */}
                              {(al.previewUrl || al.photoUrl) && (
                                <div className="w-20 h-20 aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative shrink-0">
                                   <img src={al.previewUrl || al.photoUrl} className="w-full h-full object-cover" alt="Preview" />
@@ -337,7 +509,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                              )}
                            </div>
                         </div>
-                        {/* Delete Button Separated - ALWAYS RED */}
                         <button type="button" onClick={() => setTempAllergies(tempAllergies.filter((_, i) => i !== idx))} className="shrink-0 p-3 bg-red-50 text-red-500 rounded-xl border border-red-100 shadow-sm transition-all h-fit hover:bg-red-100"><Trash2 size={18} /></button>
                      </div>
                   ))}
@@ -354,10 +525,13 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
     );
   }
 
-  // --- RENDER DETAIL VIEW (Full Page) ---
   if (viewMode === 'detail' && editingMember) {
      return (
         <div className="animate-fadeIn w-full space-y-8 pb-24">
+           {/* Portals for Sliders */}
+           {renderInsuranceSlider()}
+           {renderAllergySlider()}
+
            <div className="flex items-center gap-4">
               <button onClick={() => setViewMode('list')} className="p-3 bg-white border border-slate-200 rounded-full hover:bg-slate-50 transition-colors">
                  <ChevronLeft size={24} className="text-slate-600" />
@@ -392,23 +566,28 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                  <MiniBox label="Tgl Lahir" value={formatDateUpper(editingMember.birthDate)} />
               </div>
 
-              <div className="space-y-6">
-                 {/* Insurance List */}
+              <div className="space-y-8">
                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">Daftar Asuransi</h4>
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                      Daftar Asuransi <span className="text-[9px] bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full lowercase font-bold italic opacity-60">(klik kartu untuk detail)</span>
+                    </h4>
                     {editingMember.insurances && editingMember.insurances.length > 0 ? (
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {editingMember.insurances.map((ins, i) => (
-                             <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 relative group overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-5"><CreditCard size={60} /></div>
-                                <div className="relative z-10">
+                             <div key={i} onClick={() => setActiveInsuranceIdx(i)} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 relative group overflow-hidden cursor-pointer hover:bg-white hover:border-blue-300 hover:shadow-xl hover:-translate-y-1 transition-all flex items-center gap-5">
+                                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white shrink-0 border border-slate-200 relative z-10 flex items-center justify-center">
+                                   {ins.cardUrl ? (
+                                      <img src={ins.cardUrl} className="w-full h-full object-cover" alt="Card Preview" />
+                                   ) : (
+                                      <CreditCard size={24} className="text-slate-300" />
+                                   )}
+                                </div>
+                                <div className="relative z-10 flex-1">
                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{ins.providerName}</p>
                                    <p className="text-lg font-black text-blue-600 leading-tight mb-4 break-all">{ins.number}</p>
-                                   {ins.cardUrl && (
-                                      <button onClick={() => window.open(ins.cardUrl, '_blank')} className="flex items-center gap-2 text-[10px] font-black text-slate-500 hover:text-blue-600 uppercase tracking-widest">
-                                         <ExternalLink size={12} /> Lihat Kartu
-                                      </button>
-                                   )}
+                                   <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 group-hover:text-blue-600 uppercase tracking-widest transition-colors">
+                                      <Eye size={12} /> Lihat Detail & Foto
+                                   </div>
                                 </div>
                              </div>
                           ))}
@@ -418,17 +597,24 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
                     )}
                  </div>
 
-                 {/* Allergies */}
                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">Riwayat Alergi</h4>
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2 flex items-center gap-2">
+                      Riwayat Alergi <span className="text-[9px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full lowercase font-bold italic opacity-60">(klik item untuk detail)</span>
+                    </h4>
                     {editingMember.allergies && editingMember.allergies.length > 0 ? (
                        <div className="flex flex-wrap gap-3">
                           {editingMember.allergies.map((al, i) => (
-                             <div key={i} className="bg-rose-50 px-5 py-3 rounded-2xl border border-rose-100 flex items-center gap-3">
-                                <Shield size={16} className="text-rose-500" />
+                             <div key={i} onClick={() => setActiveAllergyIdx(i)} className="bg-rose-50 px-5 py-3 rounded-2xl border border-rose-100 flex items-center gap-4 cursor-pointer hover:bg-white hover:border-rose-300 hover:shadow-lg hover:-translate-y-0.5 transition-all group">
+                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white shrink-0 border border-rose-200 flex items-center justify-center">
+                                   {al.photoUrl ? (
+                                      <img src={al.photoUrl} className="w-full h-full object-cover" alt="Allergy Preview" />
+                                   ) : (
+                                      <Shield size={20} className="text-rose-300" />
+                                   )}
+                                </div>
                                 <div>
-                                   <p className="font-black text-slate-800 text-xs">{al.name}</p>
-                                   <p className="text-[10px] text-rose-500 italic">{al.reaction}</p>
+                                   <p className="font-black text-slate-800 text-sm">{al.name}</p>
+                                   <p className="text-[10px] text-rose-500 italic line-clamp-1">{al.reaction}</p>
                                 </div>
                              </div>
                           ))}
@@ -443,7 +629,6 @@ const MembersList: React.FC<MembersListProps> = ({ members, language, onAddMembe
      );
   }
 
-  // --- RENDER LIST VIEW ---
   return (
     <div className="space-y-8 animate-fadeIn pb-24">
       <ConfirmationModal 

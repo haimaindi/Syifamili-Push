@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Activity, 
   Users, 
@@ -52,6 +52,9 @@ const Layout: React.FC<LayoutProps> = ({
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   
+  // Ref untuk kontainer scroll utama
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
   const t = useTranslation(language);
 
   const navItems = [
@@ -68,6 +71,13 @@ const Layout: React.FC<LayoutProps> = ({
     { id: 'calculators', label: t.calculators, icon: Calculator },
     { id: 'contacts', label: t.contacts, icon: PhoneCall },
   ];
+
+  // Logic Reset Scroll ke atas setiap kali tab berubah
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     notificationService.registerServiceWorker();
@@ -139,16 +149,12 @@ const Layout: React.FC<LayoutProps> = ({
       const cleanUrl = text.replace(/"/g, '').trim();
       
       if (cleanUrl && cleanUrl.startsWith('http')) {
-        // DETEKSI MODE STANDALONE (Add to Home Screen)
-        // Pada iOS Standalone, window.open sering diblokir setelah async fetch.
-        // window.location.href akan memaksa sistem membuka Safari untuk domain eksternal.
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
         
         if (isStandalone) {
           window.location.href = cleanUrl;
         } else {
           const newWindow = window.open(cleanUrl, '_blank');
-          // Fallback jika window.open diblokir popup blocker
           if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
              window.location.href = cleanUrl;
           }
@@ -323,7 +329,11 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8 scrollbar-hide bg-slate-50/50">
+        {/* scrollContainerRef dipasang di sini */}
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto p-4 lg:p-8 scrollbar-hide bg-slate-50/50"
+        >
           <div className="max-w-6xl mx-auto space-y-8 pb-12">
             {children}
           </div>
