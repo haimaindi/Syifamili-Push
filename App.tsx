@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Layout from './components/Layout';
 import { 
   FamilyMember, MedicalRecord, Appointment, Medication, GrowthLog,
@@ -51,8 +51,10 @@ const App: React.FC = () => {
   const [initialSubId, setInitialSubId] = useState<string | null>(null);
 
   // Handle Cloud Data Fetching
-  const handleCloudFetch = useCallback(async () => {
-    setIsLoading(true);
+  const handleCloudFetch = useCallback(async (isSilent: boolean = false) => {
+    if (!isSilent) setIsLoading(true);
+    else setIsSyncing(true);
+
     try {
       const cloudData = await spreadsheetService.fetchAllData();
       if (cloudData && cloudData.members && cloudData.members.length > 0) {
@@ -70,16 +72,19 @@ const App: React.FC = () => {
         setNotes(cloudData.notes || []);
         setContacts(cloudData.contacts || []);
         setLastSync(new Date());
-      } else {
+      } else if (!isSilent) {
         setMembers(INITIAL_MEMBERS);
         setSelectedMemberId(INITIAL_MEMBERS[0].id);
       }
     } catch (err) {
-      console.error("Fetch failed, using initial state", err);
-      setMembers(INITIAL_MEMBERS);
-      setSelectedMemberId(INITIAL_MEMBERS[0].id);
+      console.error("Fetch failed", err);
+      if (!isSilent) {
+        setMembers(INITIAL_MEMBERS);
+        setSelectedMemberId(INITIAL_MEMBERS[0].id);
+      }
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   }, []); 
 
@@ -112,6 +117,23 @@ const App: React.FC = () => {
     loadBanner();
   }, [handleCloudFetch]);
 
+  // --- AUTOMATIC BACKGROUND SYNC (POLLING) ---
+  useEffect(() => {
+    // Jalankan polling setiap 60 detik
+    const SYNC_INTERVAL = 60000; 
+    
+    const intervalId = setInterval(() => {
+      // Hanya tarik data jika user sedang melihat aplikasi (tab aktif)
+      // dan tidak sedang dalam proses sync manual/simpan
+      if (document.visibilityState === 'visible' && !isSyncing && !isLoading) {
+        console.log("Auto-syncing data from cloud...");
+        handleCloudFetch(true);
+      }
+    }, SYNC_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [handleCloudFetch, isSyncing, isLoading]);
+
   // Deep Linking Logic (Runs after data is loaded)
   useEffect(() => {
     if (!isLoading && members.length > 0) {
@@ -121,24 +143,16 @@ const App: React.FC = () => {
       const memberIdParam = params.get('memberId');
 
       if (tabParam) {
-        // Switch to correct member first if provided
         if (memberIdParam) {
           const memberExists = members.find(m => m.id === memberIdParam);
           if (memberExists) {
             setSelectedMemberId(memberIdParam);
           }
         }
-
-        // Set target Item ID to open detail view
         if (idParam) {
           setInitialOpenId(idParam);
         }
-
-        // Switch Tab
         setActiveTab(tabParam);
-        
-        // Clean URL to prevent re-opening on soft refresh (optional)
-        // window.history.replaceState({}, '', '/');
       }
     }
   }, [isLoading, members]);
@@ -201,7 +215,7 @@ const App: React.FC = () => {
         setActiveTab={(t) => { setActiveTab(t); setInitialOpenId(null); setInitialSubId(null); }} 
         language={language} 
         syncStatus={{ isSyncing, lastSync }} 
-        onManualFetch={handleCloudFetch}
+        onManualFetch={() => handleCloudFetch(false)}
       >
         {(() => {
           switch (activeTab) {
