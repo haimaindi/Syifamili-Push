@@ -1,0 +1,22 @@
+
+{
+  "name": "Syifamili Family Record",
+  "short_name": "Syifamili",
+  "description": "Aplikasi rekam medis keluarga terintegrasi.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://lh3.googleusercontent.com/d/1DrGOVDFdXv24Ac2z2t49pZUH-evReTxV",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://lh3.googleusercontent.com/d/1DrGOVDFdXv24Ac2z2t49pZUH-evReTxV",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
