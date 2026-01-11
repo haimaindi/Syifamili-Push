@@ -4,7 +4,7 @@
 const VAPID_PUBLIC_KEY = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY || ''; 
 
 // URL Web App GAS Anda
-const SPREADSHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxrlJUMn-mH9xdk1w_6hH1ELeJjL0yjqriGZZ31d1fDwPLXZi0rN-Ncaar08QKM8nXG/exec';
+const SPREADSHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwIk5aeQ2yBHRfS8iwaJySiyUXyiZ-_NszDyRRfBgrU2mq_7FFhyyF5l0HSJWPMqL9j/exec';
 
 function urlBase64ToUint8Array(base64String: string) {
   if (!base64String) {
