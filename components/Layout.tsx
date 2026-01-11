@@ -22,7 +22,8 @@ import {
   Handshake,
   Bell,
   BellRing,
-  Info
+  Info,
+  BellOff
 } from 'lucide-react';
 import { Language } from '../types';
 import { useTranslation } from '../translations';
@@ -48,6 +49,7 @@ const Layout: React.FC<LayoutProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loadingLink, setLoadingLink] = useState(false);
   const [notifPermission, setNotifPermission] = useState(Notification.permission);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   
   const t = useTranslation(language);
@@ -70,7 +72,13 @@ const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     notificationService.registerServiceWorker();
     
-    // Interval check untuk update status permission jika user berubah pikiran di settings
+    // Cek status langganan saat awal muat
+    const initNotifStatus = async () => {
+      const sub = await notificationService.checkSubscription();
+      setIsSubscribed(!!sub);
+    };
+    initNotifStatus();
+
     const checkInterval = setInterval(() => {
       if (Notification.permission !== notifPermission) {
         setNotifPermission(Notification.permission);
@@ -80,29 +88,42 @@ const Layout: React.FC<LayoutProps> = ({
     return () => clearInterval(checkInterval);
   }, [notifPermission]);
 
-  const handleSubscribeClick = async () => {
-    if (Notification.permission === 'denied') {
-      alert('Izin notifikasi diblokir browser. Mohon reset izin di pengaturan browser/HP Anda untuk menerima pengingat.');
+  const handleToggleNotification = async () => {
+    if (notifPermission === 'denied') {
+      alert('Izin notifikasi diblokir browser. Mohon reset izin di pengaturan browser/HP Anda.');
       return;
     }
 
     setIsSubscribing(true);
 
     try {
-      const permission = await Notification.requestPermission();
-      setNotifPermission(permission);
-
-      if (permission === 'granted') {
-        const res = await notificationService.subscribeUser();
+      if (isSubscribed) {
+        // Logic Nonaktifkan
+        const res = await notificationService.unsubscribeUser();
         if (res.success) {
-          alert('Berhasil! Notifikasi pengingat sekarang aktif di perangkat ini.');
+          setIsSubscribed(false);
+          alert('Notifikasi telah dinonaktifkan.');
         } else {
-          alert('Gagal menyimpan langganan: ' + res.message);
+          alert('Gagal menonaktifkan: ' + res.message);
+        }
+      } else {
+        // Logic Aktifkan
+        const permission = await Notification.requestPermission();
+        setNotifPermission(permission);
+
+        if (permission === 'granted') {
+          const res = await notificationService.subscribeUser();
+          if (res.success) {
+            setIsSubscribed(true);
+            alert('Berhasil! Notifikasi pengingat aktif di perangkat ini.');
+          } else {
+            alert('Gagal mengaktifkan: ' + res.message);
+          }
         }
       }
     } catch (e) {
       console.error(e);
-      alert('Terjadi kesalahan saat mengaktifkan notifikasi.');
+      alert('Terjadi kesalahan pada pengaturan notifikasi.');
     } finally {
       setIsSubscribing(false);
     }
@@ -115,21 +136,18 @@ const Layout: React.FC<LayoutProps> = ({
       const sheetName = 'More Apps from Maindi';
       const cell = 'A1';
       const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&range=${cell}`;
-
       const response = await fetch(url);
       if (!response.ok) throw new Error('Network response was not ok');
-      
       const text = await response.text();
       const cleanUrl = text.replace(/"/g, '').trim();
-      
       if (cleanUrl && cleanUrl.startsWith('http')) {
         window.open(cleanUrl, '_blank');
       } else {
-        alert('Tautan tidak valid atau tidak ditemukan dalam spreadsheet.');
+        alert('Tautan tidak valid.');
       }
     } catch (error) {
       console.error('Failed to fetch Maindi Apps link:', error);
-      alert('Gagal mengambil tautan layanan. Pastikan Anda terhubung ke internet.');
+      alert('Gagal mengambil tautan layanan.');
     } finally {
       setLoadingLink(false);
     }
@@ -242,8 +260,8 @@ const Layout: React.FC<LayoutProps> = ({
             
             <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 gap-1">
               <div className="relative">
-                {/* Pulsating Radar Effect - Only show if permission not granted */}
-                {notifPermission !== 'granted' && (
+                {/* Radar Effect - Only show if NOT Subscribed */}
+                {!isSubscribed && (
                   <div className="absolute inset-0 z-0">
                     <span className="absolute inset-0 rounded-lg bg-blue-400 animate-ping opacity-75"></span>
                     <span className="absolute inset-[-4px] rounded-lg border-2 border-blue-400 animate-pulse opacity-50"></span>
@@ -251,26 +269,29 @@ const Layout: React.FC<LayoutProps> = ({
                 )}
 
                 <button 
-                  onClick={handleSubscribeClick}
+                  onClick={handleToggleNotification}
                   disabled={isSubscribing}
                   className={`relative z-10 p-2 rounded-lg transition-all group ${
-                    notifPermission === 'granted' 
-                      ? 'text-emerald-600 bg-white shadow-sm' 
+                    isSubscribed 
+                      ? 'text-emerald-600 bg-white shadow-sm hover:text-rose-500' 
                       : 'text-white bg-blue-600 shadow-lg shadow-blue-200'
                   }`}
-                  title={notifPermission === 'granted' ? "Notifikasi Aktif" : "Aktifkan Notifikasi"}
+                  title={isSubscribed ? "Klik untuk Matikan" : "Klik untuk Aktifkan Notifikasi"}
                 >
                   {isSubscribing ? (
                     <Loader2 size={18} className="animate-spin" />
-                  ) : notifPermission === 'granted' ? (
-                    <BellRing size={18} />
+                  ) : isSubscribed ? (
+                    <BellRing size={18} className="group-hover:hidden" />
                   ) : (
                     <Bell size={18} className="animate-swing" />
                   )}
+                  {isSubscribed && !isSubscribing && (
+                    <BellOff size={18} className="hidden group-hover:block text-rose-500" />
+                  )}
                 </button>
 
-                {/* Floating Tooltip Alert */}
-                {notifPermission !== 'granted' && (
+                {/* Floating Tooltip Alert - Only show if NOT Subscribed */}
+                {!isSubscribed && (
                   <div className="absolute top-12 right-0 z-[110] whitespace-nowrap animate-bounce pointer-events-none">
                     <div className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-tighter px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 border border-blue-400">
                       <Info size={10} /> Aktifkan Notifikasi Pengingat
